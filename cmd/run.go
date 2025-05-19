@@ -12,16 +12,38 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 
 	"github.com/spf13/cobra"
 )
+
+var url string
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Run gnat load generator",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Hello, world! 🐜 gnat is ready.")
+		if url == "" {
+			fmt.Fprintln(os.Stderr, "❌ Please provide a URL with --url")
+			os.Exit(1)
+		}
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Request failed: %v\n", err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Failed to read response body: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("✅ Response from %s:\n\n%s\n", url, string(body))
 	},
 }
 
@@ -36,5 +58,5 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// runCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	runCmd.Flags().StringVarP(&url, "url", "u", "", "Url to send requests to")
 }
