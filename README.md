@@ -5,7 +5,7 @@ Gnat is a lightweight, blazing-fast CLI tool for sending concurrent HTTP request
 ## 🔧 Installation
 
 ```shell
-git clone https://github.com/<your-username>/gnat.git
+git clone https://github.com/mishka245/gnat.git
 cd gnat
 go build -o gnat
 ```
