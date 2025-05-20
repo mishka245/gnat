@@ -11,16 +11,19 @@ You may obtain a copy of the License at
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"github.com/spf13/cobra"
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
 var url string
 var duration time.Duration
+var concurrency int
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -31,23 +34,48 @@ var runCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "❌ Please provide a URL with --url")
 			os.Exit(1)
 		}
-		endTime := time.Now().Add(duration)
-		count := 0
+		fmt.Printf("🚀 Sending requests to %s for %v with %d workers\n", url, duration, concurrency)
 
-		for time.Now().Before(endTime) {
-			resp, err := http.Get(url)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Request %d failed: %v\n", count, err)
-				continue
-			}
+		ctx, cancel := context.WithTimeout(context.Background(), duration)
+		defer cancel()
 
-			io.Copy(io.Discard, resp.Body) // Discard response for now
-			resp.Body.Close()
+		var wg sync.WaitGroup
+		var totalReqs int64
+		reqsChan := make(chan int)
 
-			count++
+		// Worker function
+		for i := 0; i < concurrency; i++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						resp, err := http.Get(url)
+						if err == nil {
+							io.Copy(io.Discard, resp.Body)
+							resp.Body.Close()
+						}
+						reqsChan <- 1
+					}
+				}
+			}(i)
 		}
 
-		fmt.Printf("✅ Finished. Sent %d requests in %v\n", count, duration)
+		// Count successful requests
+		go func() {
+			for range reqsChan {
+				totalReqs++
+			}
+		}()
+
+		// Wait for all workers to finish
+		wg.Wait()
+		close(reqsChan)
+
+		fmt.Printf("✅ Load complete. Sent %d requests in %v\n", totalReqs, duration)
 	},
 }
 
@@ -64,4 +92,5 @@ func init() {
 	// is called directly, e.g.:
 	runCmd.Flags().StringVarP(&url, "url", "u", "", "Url to send requests to")
 	runCmd.Flags().DurationVarP(&duration, "duration", "d", 5*time.Second, "How long to run the GET requests (e.g. 10s, 1m)")
+	runCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of concurrent workers")
 }
