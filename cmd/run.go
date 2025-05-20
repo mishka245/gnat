@@ -12,14 +12,15 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/spf13/cobra"
 	"io"
 	"net/http"
 	"os"
-
-	"github.com/spf13/cobra"
+	"time"
 )
 
 var url string
+var duration time.Duration
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -30,20 +31,23 @@ var runCmd = &cobra.Command{
 			fmt.Fprintln(os.Stderr, "❌ Please provide a URL with --url")
 			os.Exit(1)
 		}
-		resp, err := http.Get(url)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Request failed: %v\n", err)
-			os.Exit(1)
-		}
-		defer resp.Body.Close()
+		endTime := time.Now().Add(duration)
+		count := 0
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to read response body: %v\n", err)
-			os.Exit(1)
+		for time.Now().Before(endTime) {
+			resp, err := http.Get(url)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Request %d failed: %v\n", count, err)
+				continue
+			}
+
+			io.Copy(io.Discard, resp.Body) // Discard response for now
+			resp.Body.Close()
+
+			count++
 		}
 
-		fmt.Printf("✅ Response from %s:\n\n%s\n", url, string(body))
+		fmt.Printf("✅ Finished. Sent %d requests in %v\n", count, duration)
 	},
 }
 
@@ -59,4 +63,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	runCmd.Flags().StringVarP(&url, "url", "u", "", "Url to send requests to")
+	runCmd.Flags().DurationVarP(&duration, "duration", "d", 5*time.Second, "How long to run the GET requests (e.g. 10s, 1m)")
 }
