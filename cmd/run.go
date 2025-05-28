@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -24,6 +25,8 @@ import (
 var url string
 var duration time.Duration
 var concurrency int
+var method string
+var body string
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -53,8 +56,20 @@ var runCmd = &cobra.Command{
 					case <-ctx.Done():
 						return
 					default:
-						resp, err := http.Get(url)
-						if err == nil {
+						var resp *http.Response
+						var err error
+
+						if method == "POST" {
+							req, err := http.NewRequest("POST", url, strings.NewReader(body))
+							if err == nil {
+								req.Header.Set("Content-Type", "application/json")
+								resp, err = http.DefaultClient.Do(req)
+							}
+						} else {
+							resp, err = http.Get(url)
+						}
+
+						if err == nil && resp != nil {
 							io.Copy(io.Discard, resp.Body)
 							resp.Body.Close()
 						}
@@ -76,6 +91,12 @@ var runCmd = &cobra.Command{
 		close(reqsChan)
 
 		fmt.Printf("✅ Load complete. Sent %d requests in %v\n", totalReqs, duration)
+		if totalReqs > 0 {
+			fmt.Printf("Average requests per second: %.2f\n", float64(totalReqs)/duration.Seconds())
+		} else {
+			fmt.Println("No requests were sent.")
+
+		}
 	},
 }
 
@@ -93,4 +114,6 @@ func init() {
 	runCmd.Flags().StringVarP(&url, "url", "u", "", "Url to send requests to")
 	runCmd.Flags().DurationVarP(&duration, "duration", "d", 5*time.Second, "How long to run the GET requests (e.g. 10s, 1m)")
 	runCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of concurrent workers")
+	runCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method to use (GET or POST)")
+	runCmd.Flags().StringVar(&body, "body", "", "Raw JSON body for POST request")
 }
