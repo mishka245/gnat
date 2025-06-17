@@ -44,6 +44,7 @@ var runCmd = &cobra.Command{
 
 		var wg sync.WaitGroup
 		var totalReqs int64
+		responseStatusCodes := make(map[int]int)
 		reqsChan := make(chan int)
 
 		// Worker function
@@ -68,12 +69,13 @@ var runCmd = &cobra.Command{
 						} else {
 							resp, err = http.Get(url)
 						}
-
+						var statusCode int
 						if err == nil && resp != nil {
 							io.Copy(io.Discard, resp.Body)
+							statusCode = resp.StatusCode
 							resp.Body.Close()
 						}
-						reqsChan <- 1
+						reqsChan <- statusCode
 					}
 				}
 			}(i)
@@ -81,8 +83,9 @@ var runCmd = &cobra.Command{
 
 		// Count successful requests
 		go func() {
-			for range reqsChan {
+			for sc := range reqsChan {
 				totalReqs++
+				responseStatusCodes[sc]++
 			}
 		}()
 
@@ -93,6 +96,12 @@ var runCmd = &cobra.Command{
 		fmt.Printf("✅ Load complete. Sent %d requests in %v\n", totalReqs, duration)
 		if totalReqs > 0 {
 			fmt.Printf("Average requests per second: %.2f\n", float64(totalReqs)/duration.Seconds())
+			fmt.Println("Response status codes:")
+			for code, count := range responseStatusCodes {
+				if count > 0 {
+					fmt.Printf("  %d: %d times (%.2f%%)\n", code, count, float64(count)/float64(totalReqs)*100)
+				}
+			}
 		} else {
 			fmt.Println("No requests were sent.")
 
